@@ -22,6 +22,11 @@ class EscapeAction(Action):
         raise SystemExit
 
 
+class WaitAction(Action):
+    def perform(self, engine: Engine) -> None:
+        pass  # just burns the player's turn
+
+
 class MovementAction(Action):
     def __init__(self, dx: int, dy: int) -> None:
         self.dx = dx
@@ -30,20 +35,58 @@ class MovementAction(Action):
     def perform(self, engine: Engine) -> None:
         dest_x = engine.player.x + self.dx
         dest_y = engine.player.y + self.dy
-
         if not engine.game_map.in_bounds(dest_x, dest_y):
             return
         if not engine.game_map.tiles["walkable"][dest_x, dest_y]:
             return
         if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
-            return  # bump blocks movement; combat wired in step 6
-
+            return
         engine.player.move(self.dx, self.dy)
         engine.update_fov()
 
 
+class MeleeAction(Action):
+    def __init__(self, dx: int, dy: int) -> None:
+        self.dx = dx
+        self.dy = dy
+
+    def perform(self, engine: Engine) -> None:
+        dest_x = engine.player.x + self.dx
+        dest_y = engine.player.y + self.dy
+        target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
+        if not target or not target.fighter:
+            return
+        engine.player.fighter.do_attack(target.fighter, engine)
+
+
+class BumpAction(Action):
+    """Resolves to MeleeAction or MovementAction depending on what's at the destination."""
+
+    def __init__(self, dx: int, dy: int) -> None:
+        self.dx = dx
+        self.dy = dy
+
+    def perform(self, engine: Engine) -> None:
+        dest_x = engine.player.x + self.dx
+        dest_y = engine.player.y + self.dy
+        target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
+        if target and target.fighter:
+            MeleeAction(self.dx, self.dy).perform(engine)
+        else:
+            MovementAction(self.dx, self.dy).perform(engine)
+
+
+class TakeStairsAction(Action):
+    def perform(self, engine: Engine) -> None:
+        from game import color
+        if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
+            engine.descend()
+        else:
+            engine.message_log.add("There are no stairs here.", fg=color.WHITE)
+
+
 # ---------------------------------------------------------------------------
-# Key → action mapping
+# Key maps
 # ---------------------------------------------------------------------------
 
 MOVE_KEYS: dict[tcod.event.KeySym, tuple[int, int]] = {
@@ -52,7 +95,7 @@ MOVE_KEYS: dict[tcod.event.KeySym, tuple[int, int]] = {
     tcod.event.KeySym.DOWN:  (0,  1),
     tcod.event.KeySym.LEFT:  (-1, 0),
     tcod.event.KeySym.RIGHT: (1,  0),
-    # Numpad (8-directional)
+    # Numpad
     tcod.event.KeySym.KP_1: (-1,  1),
     tcod.event.KeySym.KP_2: ( 0,  1),
     tcod.event.KeySym.KP_3: ( 1,  1),
@@ -72,16 +115,48 @@ MOVE_KEYS: dict[tcod.event.KeySym, tuple[int, int]] = {
     tcod.event.KeySym.n: ( 1,  1),
 }
 
+WAIT_KEYS = {tcod.event.KeySym.KP_5, tcod.event.KeySym.z}
 
-def handle_event(event: tcod.event.Event) -> Optional[Action]:
-    if isinstance(event, tcod.event.Quit):
-        return EscapeAction()
+# ---------------------------------------------------------------------------
+# Event handlers (govern which keys are accepted in each game state)
+# ---------------------------------------------------------------------------
 
-    if isinstance(event, tcod.event.KeyDown):
-        if event.sym == tcod.event.KeySym.ESCAPE:
-            return EscapeAction()
-        if event.sym in MOVE_KEYS:
-            dx, dy = MOVE_KEYS[event.sym]
-            return MovementAction(dx, dy)
+class EventHandler:
+    def handle_event(self, engine: Engine, event: tcod.event.Event) -> None:
+        raise NotImplementedError
 
-    return None
+
+class MainGameEventHandler(EventHandler):
+    def handle_event(self, engine: Engine, event: tcod.event.Event) -> None:
+        if isinstance(event, tcod.event.Quit):
+            raise SystemExit
+
+        action: Optional[Action] = None
+
+        if isinstance(event, tcod.event.KeyDown):
+            sym = event.sym
+            shift = bool(event.mod & (tcod.event.Modifier.LSHIFT | tcod.event.Modifier.RSHIFT))
+
+            if sym == tcod.event.KeySym.ESCAPE:
+                action = EscapeAction()
+            elif sym in MOVE_KEYS:
+                dx, dy = MOVE_KEYS[sym]
+                action = BumpAction(dx, dy)
+            elif sym in WAIT_KEYS:
+                action = WaitAction()
+            elif sym == tcod.event.KeySym.PERIOD and shift:
+                action = TakeStairsAction()
+
+        if action is not None:
+            action.perform(engine)
+            engine.handle_enemy_turns()
+            engine.check_player_death()
+
+
+class GameOverEventHandler(EventHandler):
+    def handle_event(self, engine: Engine, event: tcod.event.Event) -> None:
+        if isinstance(event, (tcod.event.Quit,)):
+            raise SystemExit
+        if isinstance(event, tcod.event.KeyDown):
+            if event.sym == tcod.event.KeySym.ESCAPE:
+                raise SystemExit

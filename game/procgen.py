@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import random
-from typing import Iterator, List, Tuple, TYPE_CHECKING
+from typing import Iterator, List, Tuple
 
 import tcod
 
 from game import tile_types
+from game.components.ai import BasicMonster
+from game.components.fighter import Fighter
 from game.entity import Entity
 from game.game_map import GameMap
-
-if TYPE_CHECKING:
-    pass
 
 MAX_MONSTERS_PER_ROOM = 2
 
@@ -28,7 +27,6 @@ class RectangularRoom:
 
     @property
     def inner(self) -> Tuple[slice, slice]:
-        """The interior area (one tile inside the walls)."""
         return slice(self.x1 + 1, self.x2), slice(self.y1 + 1, self.y2)
 
     def intersects(self, other: RectangularRoom) -> bool:
@@ -43,15 +41,9 @@ class RectangularRoom:
 def tunnel_between(
     start: Tuple[int, int], end: Tuple[int, int]
 ) -> Iterator[Tuple[int, int]]:
-    """Yield tiles for an L-shaped corridor connecting two points."""
     x1, y1 = start
     x2, y2 = end
-    # 50/50 chance of horizontal-first vs vertical-first elbow
-    if random.random() < 0.5:
-        corner = (x2, y1)
-    else:
-        corner = (x1, y2)
-
+    corner = (x2, y1) if random.random() < 0.5 else (x1, y2)
     for x, y in tcod.los.bresenham((x1, y1), corner).tolist():
         yield x, y
     for x, y in tcod.los.bresenham(corner, (x2, y2)).tolist():
@@ -59,16 +51,26 @@ def tunnel_between(
 
 
 def place_entities(room: RectangularRoom, dungeon: GameMap) -> None:
-    num_monsters = random.randint(0, MAX_MONSTERS_PER_ROOM)
-    for _ in range(num_monsters):
+    num = random.randint(0, MAX_MONSTERS_PER_ROOM)
+    for _ in range(num):
         x = random.randint(room.x1 + 1, room.x2 - 1)
         y = random.randint(room.y1 + 1, room.y2 - 1)
         if any(e.x == x and e.y == y for e in dungeon.entities):
             continue
         if random.random() < 0.8:
-            monster = Entity(x, y, "o", (63, 127, 63), name="Orc",   blocks_movement=True)
+            monster = Entity(
+                x, y, "o", (63, 127, 63), name="orc",
+                blocks_movement=True,
+                fighter=Fighter(hp=10, attack=3, defense=0),
+                ai=BasicMonster(),
+            )
         else:
-            monster = Entity(x, y, "T", (0,  127,  0), name="Troll", blocks_movement=True)
+            monster = Entity(
+                x, y, "T", (0, 127, 0), name="troll",
+                blocks_movement=True,
+                fighter=Fighter(hp=16, attack=4, defense=1),
+                ai=BasicMonster(),
+            )
         dungeon.entities.add(monster)
 
 
@@ -90,7 +92,6 @@ def generate_dungeon(
         y = random.randint(0, map_height - h - 1)
 
         new_room = RectangularRoom(x, y, w, h)
-
         if any(new_room.intersects(r) for r in rooms):
             continue
 
@@ -104,5 +105,10 @@ def generate_dungeon(
             place_entities(new_room, dungeon)
 
         rooms.append(new_room)
+
+    # Stairs in the centre of the last room
+    sx, sy = rooms[-1].center
+    dungeon.tiles[sx, sy] = tile_types.stairs_down
+    dungeon.downstairs_location = (sx, sy)
 
     return dungeon

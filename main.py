@@ -7,24 +7,23 @@ from pathlib import Path
 import tcod
 
 from game import color, procgen
+from game.components.fighter import Fighter
 from game.engine import Engine
 from game.entity import Entity
 
-# --- Layout constants -------------------------------------------------------
+# --- Screen layout ----------------------------------------------------------
 SCREEN_WIDTH  = 80
-SCREEN_HEIGHT = 50
+SCREEN_HEIGHT = 50   # 43 map + 1 status bar + 6 message log
 MAP_WIDTH     = 80
-MAP_HEIGHT    = 45
+MAP_HEIGHT    = 43   # must match engine.MAP_HEIGHT
 
-# --- Dungeon generation parameters ------------------------------------------
+# --- Dungeon parameters -----------------------------------------------------
 ROOM_MIN_SIZE = 5
 ROOM_MAX_SIZE = 12
 MAX_ROOMS     = 30
 
-# --- Tileset -----------------------------------------------------------------
+# --- Tileset ----------------------------------------------------------------
 TILESET_FILE = Path(__file__).parent / "dejavu10x10_gs_tc.png"
-TILESET_COLS = 32
-TILESET_ROWS = 8
 
 
 def main() -> None:
@@ -37,10 +36,16 @@ def main() -> None:
         )
 
     tileset = tcod.tileset.load_tilesheet(
-        str(TILESET_FILE), TILESET_COLS, TILESET_ROWS, tcod.tileset.CHARMAP_TCOD
+        str(TILESET_FILE), 32, 8, tcod.tileset.CHARMAP_TCOD
     )
 
-    player = Entity(x=0, y=0, char="@", color=color.WHITE, name="Player")
+    player = Entity(
+        x=0, y=0,
+        char="@", color=color.WHITE,
+        name="Player",
+        blocks_movement=True,
+        fighter=Fighter(hp=30, attack=5, defense=2),
+    )
 
     game_map = procgen.generate_dungeon(
         max_rooms=MAX_ROOMS,

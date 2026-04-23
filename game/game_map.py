@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import Iterable, Optional, TYPE_CHECKING
+
+from typing import Iterable, Optional, Tuple, TYPE_CHECKING
 
 import numpy as np
-import tcod
 
 from game import tile_types
 
@@ -12,13 +12,19 @@ if TYPE_CHECKING:
 
 
 class GameMap:
-    def __init__(self, width: int, height: int, entities: Iterable[Entity] = ()) -> None:
-        self.width = width
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        entities: Iterable[Entity] = (),
+    ) -> None:
+        self.width  = width
         self.height = height
         self.entities: set[Entity] = set(entities)
         self.tiles = np.full((width, height), fill_value=tile_types.wall, dtype=tile_types.tile_dt)
         self.visible  = np.full((width, height), fill_value=False, dtype=bool)
         self.explored = np.full((width, height), fill_value=False, dtype=bool)
+        self.downstairs_location: Tuple[int, int] = (0, 0)
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -30,7 +36,6 @@ class GameMap:
         return None
 
     def render(self, console: Console) -> None:
-        """Blit tile graphics to the console respecting FOV / explored state."""
         console.tiles_rgb[0 : self.width, 0 : self.height] = np.select(
             condlist=[self.visible, self.explored],
             choicelist=[self.tiles["light"], self.tiles["dark"]],
