@@ -7,7 +7,7 @@ import tcod.event
 
 from game import color
 from game.message_log import MessageLog
-from game.render_functions import render_bar
+from game.render_functions import render_bar, render_level_up_menu
 
 if TYPE_CHECKING:
     from tcod.console import Console
@@ -15,12 +15,12 @@ if TYPE_CHECKING:
     from game.game_map import GameMap
     from game.input_handlers import EventHandler
 
-# UI layout (rows) — must stay in sync with SCREEN_HEIGHT in main.py
-MAP_HEIGHT  = 43
-BAR_WIDTH   = 20
-BAR_Y       = MAP_HEIGHT          # row 43
-LOG_Y       = MAP_HEIGHT + 1      # row 44
-LOG_HEIGHT  = 6                   # rows 44-49
+# UI layout constants (rows) — must stay in sync with SCREEN_HEIGHT in main.py
+MAP_HEIGHT = 43
+BAR_WIDTH  = 20
+BAR_Y      = MAP_HEIGHT       # row 43: status line
+LOG_Y      = MAP_HEIGHT + 1   # row 44: top of message log
+LOG_HEIGHT = 6                # rows 44-49
 
 
 class Engine:
@@ -67,9 +67,7 @@ class Engine:
     def check_player_death(self) -> None:
         if not self.player.fighter.is_alive:
             from game.input_handlers import GameOverEventHandler
-            self.message_log.add(
-                "You died! Press Esc to quit.", fg=color.RED
-            )
+            self.message_log.add("You died! Press Esc to quit.", fg=color.RED)
             self.player.char  = "%"
             self.player.color = color.RED
             self.handler = GameOverEventHandler()
@@ -84,6 +82,7 @@ class Engine:
             map_width=80,
             map_height=MAP_HEIGHT,
             player=self.player,
+            floor_number=self.floor_number,
         )
         self.message_log.add(
             f"You descend deeper… (floor {self.floor_number})", fg=color.CYAN
@@ -98,26 +97,45 @@ class Engine:
         # Map tiles
         self.game_map.render(console)
 
-        # Entities (monsters visible in FOV, then player on top)
+        # Items: show when explored (they don't move)
+        for item in self.game_map.items:
+            if self.game_map.explored[item.x, item.y]:
+                console.print(item.x, item.y, item.char, fg=item.color)
+
+        # Monsters: only when in FOV
         for entity in self.game_map.entities:
             if self.game_map.visible[entity.x, entity.y]:
                 console.print(entity.x, entity.y, entity.char, fg=entity.color)
+
+        # Player always on top
         console.print(self.player.x, self.player.y, self.player.char, fg=self.player.color)
 
-        # HP bar
+        # --- Status bar (row 43) ---
+        p = self.player
         render_bar(
             console,
-            current=self.player.fighter.hp,
-            maximum=self.player.fighter.max_hp,
+            current=p.fighter.hp,
+            maximum=p.fighter.max_hp,
             total_width=BAR_WIDTH,
             y=BAR_Y,
             label="HP",
             full_color=color.HP_BAR_FULL,
             empty_color=color.HP_BAR_EMPTY,
         )
+        lv  = p.level.current_level
+        xp  = p.level.current_xp
+        nxt = p.level.xp_to_next_level
+        potions = sum(1 for i in p.inventory if i.item)
+        console.print(
+            BAR_WIDTH + 1, BAR_Y,
+            f"Floor:{self.floor_number}  Lv:{lv}  XP:{xp}/{nxt}  !:{potions}",
+            fg=color.YELLOW,
+        )
 
-        # Floor number
-        console.print(BAR_WIDTH + 1, BAR_Y, f"Floor: {self.floor_number}", fg=color.YELLOW)
-
-        # Message log
+        # --- Message log (rows 44-49) ---
         self.message_log.render(console, x=0, y=LOG_Y, width=80, height=LOG_HEIGHT)
+
+        # --- Level-up overlay (drawn last so it's on top) ---
+        from game.input_handlers import LevelUpEventHandler
+        if isinstance(self.handler, LevelUpEventHandler):
+            render_level_up_menu(console, self.player)

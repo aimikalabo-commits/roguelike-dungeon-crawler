@@ -30,6 +30,9 @@ class Fighter:
             if not target.is_alive and target.entity is not engine.player:
                 engine.message_log.add(f"{victim} dies!", fg=color.ORANGE)
                 engine.game_map.entities.discard(target.entity)
+                # Award XP to player
+                if target.entity.level and engine.player.level:
+                    engine.player.level.add_xp(target.entity.level.xp_given, engine)
         else:
             engine.message_log.add(
                 f"{attacker} attacks {victim} but does no damage.", fg=color.WHITE

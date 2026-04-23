@@ -20,7 +20,8 @@ class GameMap:
     ) -> None:
         self.width  = width
         self.height = height
-        self.entities: set[Entity] = set(entities)
+        self.entities: set[Entity] = set(entities)   # monsters / blocking things
+        self.items:    set[Entity] = set()            # non-blocking pickups
         self.tiles = np.full((width, height), fill_value=tile_types.wall, dtype=tile_types.tile_dt)
         self.visible  = np.full((width, height), fill_value=False, dtype=bool)
         self.explored = np.full((width, height), fill_value=False, dtype=bool)

@@ -8,6 +8,7 @@ import tcod
 
 from game import color, procgen
 from game.components.fighter import Fighter
+from game.components.level import Level
 from game.engine import Engine
 from game.entity import Entity
 
@@ -45,6 +46,7 @@ def main() -> None:
         name="Player",
         blocks_movement=True,
         fighter=Fighter(hp=30, attack=5, defense=2),
+        level=Level(current_level=1),
     )
 
     game_map = procgen.generate_dungeon(
@@ -54,6 +56,7 @@ def main() -> None:
         map_width=MAP_WIDTH,
         map_height=MAP_HEIGHT,
         player=player,
+        floor_number=1,
     )
 
     engine = Engine(player=player, game_map=game_map)

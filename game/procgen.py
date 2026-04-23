@@ -5,13 +5,9 @@ from typing import Iterator, List, Tuple
 
 import tcod
 
-from game import tile_types
-from game.components.ai import BasicMonster
-from game.components.fighter import Fighter
+from game import entity_factories, tile_types
 from game.entity import Entity
 from game.game_map import GameMap
-
-MAX_MONSTERS_PER_ROOM = 2
 
 
 class RectangularRoom:
@@ -50,28 +46,24 @@ def tunnel_between(
         yield x, y
 
 
-def place_entities(room: RectangularRoom, dungeon: GameMap) -> None:
-    num = random.randint(0, MAX_MONSTERS_PER_ROOM)
-    for _ in range(num):
+def place_entities(room: RectangularRoom, dungeon: GameMap, floor: int) -> None:
+    num_monsters = random.randint(0, entity_factories.max_monsters_by_floor(floor))
+    num_items    = random.randint(0, entity_factories.max_items_by_floor(floor))
+    used: set[Tuple[int, int]] = set()
+
+    for _ in range(num_monsters):
         x = random.randint(room.x1 + 1, room.x2 - 1)
         y = random.randint(room.y1 + 1, room.y2 - 1)
-        if any(e.x == x and e.y == y for e in dungeon.entities):
-            continue
-        if random.random() < 0.8:
-            monster = Entity(
-                x, y, "o", (63, 127, 63), name="orc",
-                blocks_movement=True,
-                fighter=Fighter(hp=10, attack=3, defense=0),
-                ai=BasicMonster(),
-            )
-        else:
-            monster = Entity(
-                x, y, "T", (0, 127, 0), name="troll",
-                blocks_movement=True,
-                fighter=Fighter(hp=16, attack=4, defense=1),
-                ai=BasicMonster(),
-            )
-        dungeon.entities.add(monster)
+        if (x, y) not in used and not dungeon.get_blocking_entity_at(x, y):
+            used.add((x, y))
+            dungeon.entities.add(entity_factories.get_random_monster(floor, x, y))
+
+    for _ in range(num_items):
+        x = random.randint(room.x1 + 1, room.x2 - 1)
+        y = random.randint(room.y1 + 1, room.y2 - 1)
+        if (x, y) not in used:
+            used.add((x, y))
+            dungeon.items.add(entity_factories.get_random_item(floor, x, y))
 
 
 def generate_dungeon(
@@ -81,6 +73,7 @@ def generate_dungeon(
     map_width: int,
     map_height: int,
     player: Entity,
+    floor_number: int = 1,
 ) -> GameMap:
     dungeon = GameMap(map_width, map_height)
     rooms: List[RectangularRoom] = []
@@ -102,7 +95,7 @@ def generate_dungeon(
         else:
             for cx, cy in tunnel_between(rooms[-1].center, new_room.center):
                 dungeon.tiles[cx, cy] = tile_types.floor
-            place_entities(new_room, dungeon)
+            place_entities(new_room, dungeon, floor_number)
 
         rooms.append(new_room)
 
