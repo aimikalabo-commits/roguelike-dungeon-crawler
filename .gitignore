@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+dejavu10x10_gs_tc.png
