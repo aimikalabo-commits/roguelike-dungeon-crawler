@@ -13,18 +13,19 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 class Action:
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
+        """Perform the action. Returns True if it consumed the player's turn."""
         raise NotImplementedError
 
 
 class EscapeAction(Action):
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         raise SystemExit
 
 
 class WaitAction(Action):
-    def perform(self, engine: Engine) -> None:
-        pass  # burns the player's turn
+    def perform(self, engine: Engine) -> bool:
+        return True  # burns the player's turn
 
 
 class MovementAction(Action):
@@ -32,17 +33,20 @@ class MovementAction(Action):
         self.dx = dx
         self.dy = dy
 
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
+        from game import color
         dest_x = engine.player.x + self.dx
         dest_y = engine.player.y + self.dy
-        if not engine.game_map.in_bounds(dest_x, dest_y):
-            return
-        if not engine.game_map.tiles["walkable"][dest_x, dest_y]:
-            return
-        if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
-            return
+        if (
+            not engine.game_map.in_bounds(dest_x, dest_y)
+            or not engine.game_map.tiles["walkable"][dest_x, dest_y]
+            or engine.game_map.get_blocking_entity_at(dest_x, dest_y)
+        ):
+            engine.message_log.add("That way is blocked.", fg=color.WHITE)
+            return False
         engine.player.move(self.dx, self.dy)
         engine.update_fov()
+        return True
 
 
 class MeleeAction(Action):
@@ -50,13 +54,14 @@ class MeleeAction(Action):
         self.dx = dx
         self.dy = dy
 
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         dest_x = engine.player.x + self.dx
         dest_y = engine.player.y + self.dy
         target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
         if not target or not target.fighter:
-            return
+            return False
         engine.player.fighter.do_attack(target.fighter, engine)
+        return True
 
 
 class BumpAction(Action):
@@ -66,18 +71,17 @@ class BumpAction(Action):
         self.dx = dx
         self.dy = dy
 
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         dest_x = engine.player.x + self.dx
         dest_y = engine.player.y + self.dy
         target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
         if target and target.fighter:
-            MeleeAction(self.dx, self.dy).perform(engine)
-        else:
-            MovementAction(self.dx, self.dy).perform(engine)
+            return MeleeAction(self.dx, self.dy).perform(engine)
+        return MovementAction(self.dx, self.dy).perform(engine)
 
 
 class PickupAction(Action):
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         from game import color
         player = engine.player
         item_here = next(
@@ -86,19 +90,20 @@ class PickupAction(Action):
         )
         if not item_here:
             engine.message_log.add("Nothing to pick up here.", fg=color.WHITE)
-            return
+            return False
         if len(player.inventory) >= 5:
             engine.message_log.add("Inventory full! (max 5 items)", fg=color.YELLOW)
-            return
+            return False
         engine.game_map.items.discard(item_here)
         player.inventory.append(item_here)
         engine.message_log.add(
             f"You pick up the {item_here.name}.", fg=color.WHITE
         )
+        return True
 
 
 class UseItemAction(Action):
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         from game import color
         player = engine.player
         for item in player.inventory:
@@ -106,17 +111,19 @@ class UseItemAction(Action):
                 success = item.item.use(engine)
                 if success:
                     player.inventory.remove(item)
-                return
+                return success
         engine.message_log.add("No usable items in inventory.", fg=color.WHITE)
+        return False
 
 
 class TakeStairsAction(Action):
-    def perform(self, engine: Engine) -> None:
+    def perform(self, engine: Engine) -> bool:
         from game import color
         if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
             engine.descend()
-        else:
-            engine.message_log.add("There are no stairs here.", fg=color.WHITE)
+            return True
+        engine.message_log.add("There are no stairs here.", fg=color.WHITE)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -180,15 +187,17 @@ class MainGameEventHandler(EventHandler):
                 action = WaitAction()
             elif sym == tcod.event.KeySym.G:
                 action = PickupAction()
-            elif sym == tcod.event.KeySym.U:
+            elif sym == tcod.event.KeySym.Q:
+                # q = quaff/use item ('u' is taken by vi diagonal movement)
                 action = UseItemAction()
             elif sym == tcod.event.KeySym.PERIOD and shift:
                 action = TakeStairsAction()
 
         if action is not None:
-            action.perform(engine)
-            engine.handle_enemy_turns()
-            engine.check_player_death()
+            turn_consumed = action.perform(engine)
+            if turn_consumed:
+                engine.handle_enemy_turns()
+                engine.check_player_death()
 
 
 class LevelUpEventHandler(EventHandler):
@@ -209,7 +218,10 @@ class LevelUpEventHandler(EventHandler):
 
             if chosen is not None:
                 chosen(engine)
-                engine.handler = MainGameEventHandler()
+                # Banked XP may cover several levels at once; keep the menu
+                # open until every pending level-up has been spent.
+                if not player.level.requires_level_up:
+                    engine.handler = MainGameEventHandler()
 
 
 class GameOverEventHandler(EventHandler):

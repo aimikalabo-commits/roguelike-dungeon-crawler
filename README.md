@@ -44,6 +44,11 @@ python main.py
 | Arrow keys / Numpad | Move (8-directional) |
 | `h j k l` | Move left / down / up / right (vi) |
 | `y u b n` | Move diagonally (vi) |
+| `z` / Numpad `5` | Wait a turn |
+| `g` | Pick up item |
+| `q` | Quaff (use) a potion |
+| `>` (`Shift+.`) | Descend stairs |
+| `a` / `b` / `c` | Choose stat on level-up |
 | `Esc` | Quit |
 
 ## Project Structure
