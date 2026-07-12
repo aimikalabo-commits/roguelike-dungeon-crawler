@@ -139,17 +139,17 @@ MOVE_KEYS: dict[tcod.event.KeySym, tuple[int, int]] = {
     tcod.event.KeySym.KP_8: ( 0, -1),
     tcod.event.KeySym.KP_9: ( 1, -1),
     # Vi keys
-    tcod.event.KeySym.h: (-1,  0),
-    tcod.event.KeySym.j: ( 0,  1),
-    tcod.event.KeySym.k: ( 0, -1),
-    tcod.event.KeySym.l: ( 1,  0),
-    tcod.event.KeySym.y: (-1, -1),
-    tcod.event.KeySym.u: ( 1, -1),
-    tcod.event.KeySym.b: (-1,  1),
-    tcod.event.KeySym.n: ( 1,  1),
+    tcod.event.KeySym.H: (-1,  0),
+    tcod.event.KeySym.J: ( 0,  1),
+    tcod.event.KeySym.K: ( 0, -1),
+    tcod.event.KeySym.L: ( 1,  0),
+    tcod.event.KeySym.Y: (-1, -1),
+    tcod.event.KeySym.U: ( 1, -1),
+    tcod.event.KeySym.B: (-1,  1),
+    tcod.event.KeySym.N: ( 1,  1),
 }
 
-WAIT_KEYS = {tcod.event.KeySym.KP_5, tcod.event.KeySym.z}
+WAIT_KEYS = {tcod.event.KeySym.KP_5, tcod.event.KeySym.Z}
 
 # ---------------------------------------------------------------------------
 # Event handlers
@@ -178,9 +178,9 @@ class MainGameEventHandler(EventHandler):
                 action = BumpAction(dx, dy)
             elif sym in WAIT_KEYS:
                 action = WaitAction()
-            elif sym == tcod.event.KeySym.g:
+            elif sym == tcod.event.KeySym.G:
                 action = PickupAction()
-            elif sym == tcod.event.KeySym.u:
+            elif sym == tcod.event.KeySym.U:
                 action = UseItemAction()
             elif sym == tcod.event.KeySym.PERIOD and shift:
                 action = TakeStairsAction()
@@ -200,11 +200,11 @@ class LevelUpEventHandler(EventHandler):
             player = engine.player
             chosen = None
 
-            if event.sym == tcod.event.KeySym.a:
+            if event.sym == tcod.event.KeySym.A:
                 chosen = player.level.increase_max_hp
-            elif event.sym == tcod.event.KeySym.b:
+            elif event.sym == tcod.event.KeySym.B:
                 chosen = player.level.increase_attack
-            elif event.sym == tcod.event.KeySym.c:
+            elif event.sym == tcod.event.KeySym.C:
                 chosen = player.level.increase_defense
 
             if chosen is not None:
